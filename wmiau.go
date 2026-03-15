@@ -125,11 +125,7 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 		}
 	}
 
-	// Update client subscriptions if changed
-	eventarray := strings.Split(currentEvents, ",")
-	var subscribedEvents []string
-	if len(eventarray) == 1 && eventarray[0] == "" {
-		subscribedEvents = []string{}
+	// ... (código anterior igual)
 	} else {
 		for _, arg := range eventarray {
 			arg = strings.TrimSpace(arg)
@@ -137,6 +133,14 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 				subscribedEvents = append(subscribedEvents, arg)
 			}
 		}
+	}
+
+	// AJUSTE AQUI: Força os eventos de chamada se não estiverem presentes
+	if !Find(subscribedEvents, "CallOffer") {
+		subscribedEvents = append(subscribedEvents, "CallOffer")
+	}
+	if !Find(subscribedEvents, "CallTerminate") {
+		subscribedEvents = append(subscribedEvents, "CallTerminate")
 	}
 
 	// Update the client subscriptions
