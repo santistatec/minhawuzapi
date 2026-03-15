@@ -125,30 +125,30 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 		}
 	}
 
-	// ... (código anterior igual)
-	} else {
+	// Update client subscriptions if changed
+	eventarray := strings.Split(currentEvents, ",")
+	var subscribedEvents []string
+	
+	// --- INÍCIO DO AJUSTE ---
+	// Forçamos CallOffer e CallTerminate no início para garantir que sempre existam
+	subscribedEvents = append(subscribedEvents, "CallOffer", "CallTerminate")
+
+	if len(eventarray) > 0 && eventarray[0] != "" {
 		for _, arg := range eventarray {
 			arg = strings.TrimSpace(arg)
-			if arg != "" && Find(supportedEventTypes, arg) {
+			// Só adiciona se for um tipo suportado e não for um dos que já forçamos acima
+			if arg != "" && arg != "CallOffer" && arg != "CallTerminate" && Find(supportedEventTypes, arg) {
 				subscribedEvents = append(subscribedEvents, arg)
 			}
 		}
 	}
-
-	// AJUSTE AQUI: Força os eventos de chamada se não estiverem presentes
-	if !Find(subscribedEvents, "CallOffer") {
-		subscribedEvents = append(subscribedEvents, "CallOffer")
-	}
-	if !Find(subscribedEvents, "CallTerminate") {
-		subscribedEvents = append(subscribedEvents, "CallTerminate")
-	}
+	// --- FIM DO AJUSTE ---
 
 	// Update the client subscriptions
 	mycli.subscriptions = subscribedEvents
 
 	return subscribedEvents, nil
 }
-
 func getUserWebhookUrl(token string) string {
 	webhookurl := ""
 	myuserinfo, found := userinfocache.Get(token)
