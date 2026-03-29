@@ -125,30 +125,30 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 		}
 	}
 
-	// Update client subscriptions if changed
-	eventarray := strings.Split(currentEvents, ",")
-	var subscribedEvents []string
-	
-	// --- INÍCIO DO AJUSTE ---
-	// Forçamos CallOffer e CallTerminate no início para garantir que sempre existam
-	subscribedEvents = append(subscribedEvents, "CallOffer", "CallTerminate")
-
-	if len(eventarray) > 0 && eventarray[0] != "" {
+	// ... (código anterior igual)
+	} else {
 		for _, arg := range eventarray {
 			arg = strings.TrimSpace(arg)
-			// Só adiciona se for um tipo suportado e não for um dos que já forçamos acima
-			if arg != "" && arg != "CallOffer" && arg != "CallTerminate" && Find(supportedEventTypes, arg) {
+			if arg != "" && Find(supportedEventTypes, arg) {
 				subscribedEvents = append(subscribedEvents, arg)
 			}
 		}
 	}
-	// --- FIM DO AJUSTE ---
+
+	// AJUSTE AQUI: Força os eventos de chamada se não estiverem presentes
+	if !Find(subscribedEvents, "CallOffer") {
+		subscribedEvents = append(subscribedEvents, "CallOffer")
+	}
+	if !Find(subscribedEvents, "CallTerminate") {
+		subscribedEvents = append(subscribedEvents, "CallTerminate")
+	}
 
 	// Update the client subscriptions
 	mycli.subscriptions = subscribedEvents
 
 	return subscribedEvents, nil
 }
+
 func getUserWebhookUrl(token string) string {
 	webhookurl := ""
 	myuserinfo, found := userinfocache.Get(token)
@@ -213,6 +213,24 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 			}
 		}
 	}
+
+    // --- DAQUI PARA BAIXO É ONDE OCORRE O ENVIO ---
+
+    // 1. Envia para o Webhook individual do usuário (se ele tiver um configurado)
+	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
+
+	// 2. O FILTRO PARA O GESTOR TEC PRO (Webhook Global)
+    // Só envia para o Global (o link do seu .env) se for chamada
+	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
+        log.Info().Str("type", eventType).Msg("Encaminhando chamada para o Gestor Tec Pro")
+		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
+	} else {
+        // Opcional: Log de debug para ver que o lixo está sendo ignorado
+        log.Debug().Str("type", eventType).Msg("Evento ignorado pelo filtro global")
+    }
+
+	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
+}
 
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
