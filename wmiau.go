@@ -169,29 +169,32 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		return
 	}
 
-	// eventType já foi definido aqui embaixo pelo seu código original
 	eventType, ok := postmap["type"].(string)
 	if !ok {
 		log.Error().Msg("Event type is not a string in postmap")
 		return
 	}
 
+	// Verifica se o evento está nas inscrições
 	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, eventType, mycli.userID)
 	if !checkIfSubscribedInEvent {
 		return
 	}
 
+	// Modo Stdio (ignora se não estiver usando rpc)
 	if mycli.s != nil && mycli.s.mode == Stdio {
 		mycli.s.SendNotification(eventType, postmap)
 		return
 	}
 
+	// Prepara os dados JSON
 	jsonData, err := json.Marshal(postmap)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
 		return
 	}
 
+	// Busca chave HMAC
 	var encryptedHmacKey []byte
 	if userinfo, found := userinfocache.Get(mycli.token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
@@ -204,20 +207,19 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		}
 	}
 
-	// --- INÍCIO DOS ENVIOS ---
-
-	// 1. Envia para o Webhook do Usuário (Sempre envia se o usuário tiver um)
+	// 1. Envia para o Webhook do Usuário (Sempre envia se ele configurou um)
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
-	// 2. FILTRO PARA O GESTOR TEC PRO (Webhook Global)
-	// Aqui não usamos ":=" pois eventType já existe lá no topo
+	// 2. FILTRO GESTOR TEC PRO (Webhook Global do .env)
+	// Só enviamos se o tipo do evento for de chamada
 	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
+		log.Info().Str("type", eventType).Msg("Chamada detectada: Enviando ao Webhook Global")
 		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
 	}
 
+	// Envio para Rabbit (se houver)
 	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
 }
-
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
 	if !Find(subscribedEvents, eventType) && !Find(subscribedEvents, "All") {
 		log.Warn().
