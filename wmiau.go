@@ -111,42 +111,47 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 	}
 }
 
-func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
-	// Get updated events from cache/database
-	currentEvents := ""
-	userinfo2, found2 := userinfocache.Get(mycli.token)
-	if found2 {
-		currentEvents = userinfo2.(Values).Get("Events")
-	} else {
-		// If not in cache, get from database
-		if err := mycli.db.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", mycli.userID); err != nil {
-			log.Warn().Err(err).Str("userID", mycli.userID).Msg("Could not get events from DB")
-			return nil, err // Propagate the error
+func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
+	webhookurl := getUserWebhookUrl(mycli.token)
+
+	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
+	if err != nil {
+		return
+	}
+
+	eventType, ok := postmap["type"].(string)
+	if !ok {
+		return
+	}
+
+	if !checkIfSubscribedToEvent(subscribedEvents, eventType, mycli.userID) {
+		return
+	}
+
+	jsonData, err := json.Marshal(postmap)
+	if err != nil {
+		return
+	}
+
+	var encryptedHmacKey []byte
+	if userinfo, found := userinfocache.Get(mycli.token); found {
+		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
+		if encryptedB64 != "" {
+			encryptedHmacKey, _ = base64.StdEncoding.DecodeString(encryptedB64)
 		}
 	}
 
-	// ... (código anterior igual)
-	} else {
-		for _, arg := range eventarray {
-			arg = strings.TrimSpace(arg)
-			if arg != "" && Find(supportedEventTypes, arg) {
-				subscribedEvents = append(subscribedEvents, arg)
-			}
-		}
+	// 1. Webhook Individual do Cliente
+	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
+
+	// 2. FILTRO GESTOR TEC PRO (Global)
+	// Só manda pro seu servidor de rejeição se for Chamada
+	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
+		log.Info().Str("type", eventType).Msg("Encaminhando chamada para Rejeição")
+		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
 	}
 
-	// AJUSTE AQUI: Força os eventos de chamada se não estiverem presentes
-	if !Find(subscribedEvents, "CallOffer") {
-		subscribedEvents = append(subscribedEvents, "CallOffer")
-	}
-	if !Find(subscribedEvents, "CallTerminate") {
-		subscribedEvents = append(subscribedEvents, "CallTerminate")
-	}
-
-	// Update the client subscriptions
-	mycli.subscriptions = subscribedEvents
-
-	return subscribedEvents, nil
+	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
 }
 
 func getUserWebhookUrl(token string) string {
