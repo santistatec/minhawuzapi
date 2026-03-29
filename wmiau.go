@@ -1889,9 +1889,9 @@ case *events.FBMessage:
 	}
 }
 
-// --- FUNÇÕES AUXILIARES NO FINAL DO ARQUIVO ---
+// --- FUNÇÕES DE SUPORTE (FORA DA FUNÇÃO PRINCIPAL) ---
 
-// Find verifica se uma string existe dentro de um slice (array) de strings
+// Find verifica se uma string existe em um array
 func Find(slice []string, val string) bool {
 	for _, item := range slice {
 		if item == val {
@@ -1901,9 +1901,12 @@ func Find(slice []string, val string) bool {
 	return false
 }
 
-// updateUserInfo atualiza os valores no cache de informações do usuário
+// updateUserInfo auxilia na atualização do cache
 func updateUserInfo(myuserinfo interface{}, key string, value string) Values {
 	v := myuserinfo.(Values)
+	if v.m == nil {
+		v.m = make(map[string]string)
+	}
 	v.m[key] = value
 	return v
 }
