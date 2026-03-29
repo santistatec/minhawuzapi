@@ -1876,7 +1876,7 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		postmap["type"] = "NewsletterLiveUpdate"
 		dowebhook = 1
 		log.Info().Msg("Newsletter live update")
-	case *events.FBMessage:
+case *events.FBMessage:
 		postmap["type"] = "FBMessage"
 		dowebhook = 1
 		log.Info().Str("info", evt.Info.SourceString()).Msg("Facebook message received")
@@ -1887,4 +1887,23 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	if dowebhook == 1 {
 		sendEventWithWebHook(mycli, postmap, path)
 	}
+}
+
+// --- FUNÇÕES AUXILIARES NO FINAL DO ARQUIVO ---
+
+// Find verifica se uma string existe dentro de um slice (array) de strings
+func Find(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
+}
+
+// updateUserInfo atualiza os valores no cache de informações do usuário
+func updateUserInfo(myuserinfo interface{}, key string, value string) Values {
+	v := myuserinfo.(Values)
+	v.m[key] = value
+	return v
 }
