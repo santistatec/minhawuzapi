@@ -112,21 +112,22 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 }
 
 func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
-	// Get updated events from cache/database
 	currentEvents := ""
 	userinfo2, found2 := userinfocache.Get(mycli.token)
+	
 	if found2 {
 		currentEvents = userinfo2.(Values).Get("Events")
 	} else {
-		// If not in cache, get from database
 		if err := mycli.db.Get(&currentEvents, "SELECT events FROM users WHERE id=$1", mycli.userID); err != nil {
 			log.Warn().Err(err).Str("userID", mycli.userID).Msg("Could not get events from DB")
-			return nil, err // Propagate the error
+			return nil, err
 		}
 	}
 
-	// ... (código anterior igual)
-	} else {
+	eventarray := strings.Split(currentEvents, ",")
+	var subscribedEvents []string
+	
+	if len(eventarray) > 0 && eventarray[0] != "" {
 		for _, arg := range eventarray {
 			arg = strings.TrimSpace(arg)
 			if arg != "" && Find(supportedEventTypes, arg) {
@@ -135,7 +136,7 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 		}
 	}
 
-	// AJUSTE AQUI: Força os eventos de chamada se não estiverem presentes
+	// Força os eventos de chamada para o Gestor Tec Pro
 	if !Find(subscribedEvents, "CallOffer") {
 		subscribedEvents = append(subscribedEvents, "CallOffer")
 	}
@@ -143,60 +144,29 @@ func updateAndGetUserSubscriptions(mycli *MyClient) ([]string, error) {
 		subscribedEvents = append(subscribedEvents, "CallTerminate")
 	}
 
-	// Update the client subscriptions
 	mycli.subscriptions = subscribedEvents
-
 	return subscribedEvents, nil
-}
-
-func getUserWebhookUrl(token string) string {
-	webhookurl := ""
-	myuserinfo, found := userinfocache.Get(token)
-	if !found {
-		log.Warn().Str("token", token).Msg("Could not call webhook as there is no user for this token")
-	} else {
-		webhookurl = myuserinfo.(Values).Get("Webhook")
-	}
-	return webhookurl
 }
 
 func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
 	webhookurl := getUserWebhookUrl(mycli.token)
 
-	// Get updated events from cache/database
 	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
 	if err != nil {
 		return
 	}
 
-	// 1. A variável é criada AQUI (eventType)
 	eventType, ok := postmap["type"].(string)
 	if !ok {
-		log.Error().Msg("Event type is not a string in postmap")
 		return
 	}
 
-	// Log para debug
-	log.Debug().
-		Str("userID", mycli.userID).
-		Str("eventType", eventType).
-		Strs("subscribedEvents", subscribedEvents).
-		Msg("Checking event subscription")
-
-	// Verifica se está inscrito
-	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, eventType, mycli.userID)
-	if !checkIfSubscribedInEvent {
-		return
-	}
-
-	if mycli.s != nil && mycli.s.mode == Stdio {
-		mycli.s.SendNotification(eventType, postmap)
+	if !checkIfSubscribedToEvent(subscribedEvents, eventType, mycli.userID) {
 		return
 	}
 
 	jsonData, err := json.Marshal(postmap)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
 		return
 	}
 
@@ -204,27 +174,28 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 	if userinfo, found := userinfocache.Get(mycli.token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
 		if encryptedB64 != "" {
-			var err error
-			encryptedHmacKey, err = base64.StdEncoding.DecodeString(encryptedB64)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to decode HMAC key from cache")
-			}
+			encryptedHmacKey, _ = base64.StdEncoding.DecodeString(encryptedB64)
 		}
 	}
 
-	// Envia para o Webhook do Usuário
+	// 1. Envio para o Webhook do Usuário (Instância)
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
-	// 2. FILTRO GLOBAL: Usamos a variável eventType que já existe (sem o :=)
+	// 2. FILTRO GLOBAL: Só envia se for chamada
 	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
-		log.Info().Str("type", eventType).Msg("Enviando evento de chamada para o Webhook Global")
+		log.Info().Str("type", eventType).Msg("Chamada detectada: Enviando ao Webhook Global")
 		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
-	} else {
-		log.Debug().Str("type", eventType).Msg("Evento ignorado para o Webhook Global (não é chamada)")
 	}
 
 	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
 }
+
+
+
+
+
+
+
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
 	if !Find(subscribedEvents, eventType) && !Find(subscribedEvents, "All") {
