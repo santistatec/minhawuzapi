@@ -163,7 +163,6 @@ func getUserWebhookUrl(token string) string {
 func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
 	webhookurl := getUserWebhookUrl(mycli.token)
 
-	// Get updated events from cache/database
 	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
 	if err != nil {
 		return
@@ -175,33 +174,22 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		return
 	}
 
-	// Log subscription details for debugging
-	log.Debug().
-		Str("userID", mycli.userID).
-		Str("eventType", eventType).
-		Strs("subscribedEvents", subscribedEvents).
-		Msg("Checking event subscription")
-
-	// Check if the current event is in the subscriptions
-	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), mycli.userID)
+	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, eventType, mycli.userID)
 	if !checkIfSubscribedInEvent {
 		return
 	}
 
-	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
 	if mycli.s != nil && mycli.s.mode == Stdio {
 		mycli.s.SendNotification(eventType, postmap)
 		return
 	}
 
-	// Prepare webhook data
 	jsonData, err := json.Marshal(postmap)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
 		return
 	}
 
-	// Get HMAC key for this user
 	var encryptedHmacKey []byte
 	if userinfo, found := userinfocache.Get(mycli.token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
@@ -214,28 +202,14 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		}
 	}
 
-    // --- DAQUI PARA BAIXO É ONDE OCORRE O ENVIO ---
-
-    // 1. Envia para o Webhook individual do usuário (se ele tiver um configurado)
+	// 1. Envio para o Webhook do Usuário (Instância específica)
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
-	// 2. O FILTRO PARA O GESTOR TEC PRO (Webhook Global)
-    // Só envia para o Global (o link do seu .env) se for chamada
+	// 2. FILTRO GLOBAL: Só envia para o Gestor Tec Pro se for CHAMADA
 	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
-        log.Info().Str("type", eventType).Msg("Encaminhando chamada para o Gestor Tec Pro")
+		log.Info().Str("type", eventType).Msg("Encaminhando chamada para o Global Webhook")
 		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
-	} else {
-        // Opcional: Log de debug para ver que o lixo está sendo ignorado
-        log.Debug().Str("type", eventType).Msg("Evento ignorado pelo filtro global")
-    }
-
-	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
-}
-
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
-
-	// Get global webhook if configured
-	go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
+	}
 
 	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
 }
