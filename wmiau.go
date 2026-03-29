@@ -800,12 +800,12 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		log.Info().Msg("Received StreamReplaced event")
 		return
 	case *events.Message:
-		// --- NOVO AJUSTE DE PERFORMANCE ---
-		// Se não for chamada e o usuário não tiver webhook pra mensagens, não perdemos tempo processando
+		// --- AJUSTE DE PERFORMANCE CORRIGIDO ---
+		// Verifica se o usuário tem um webhook configurado
 		webhookurl := getUserWebhookUrl(mycli.token)
-		if webhookurl == "" && eventType != "CallOffer" {
-			// Apenas salva no histórico se houver limite, mas não processa mídia pesada
-			log.Debug().Msg("Pulando processamento de mídia: Usuário sem Webhook")
+		if webhookurl == "" {
+			// Se não tem webhook, apenas logamos no Debug e seguimos para o histórico
+			log.Debug().Msg("Pulando processamento de mídia pesada: Usuário sem Webhook configurado")
 		}
 		// --- FIM DO AJUSTE ---
 
