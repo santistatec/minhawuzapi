@@ -1906,7 +1906,6 @@ func Find(slice []string, val string) bool {
 	return false
 }
 
-// updateUserInfo auxilia na atualização do cache
 func updateUserInfo(myuserinfo interface{}, key string, value string) Values {
 	v := myuserinfo.(Values)
 	if v.m == nil {
