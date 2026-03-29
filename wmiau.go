@@ -1865,8 +1865,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		sendEventWithWebHook(mycli, postmap, path)
 	}
 }
-// --- FUNÇÕES DE SUPORTE (ADICIONE NO FINAL DO ARQUIVO) ---
 
+// MANTENHA APENAS ESTA FUNÇÃO ABAIXO:
 func getUserWebhookUrl(token string) string {
 	webhookurl := ""
 	myuserinfo, found := userinfocache.Get(token)
@@ -1878,27 +1878,5 @@ func getUserWebhookUrl(token string) string {
 	return webhookurl
 }
 
-func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
-	if !Find(subscribedEvents, eventType) && !Find(subscribedEvents, "All") {
-		return false
-	}
-	return true
-}
-
-func Find(slice []string, val string) bool {
-	for _, item := range slice {
-		if item == val {
-			return true
-		}
-	}
-	return false
-}
-
-func updateUserInfo(myuserinfo interface{}, key string, value string) Values {
-	v := myuserinfo.(Values)
-	if v.m == nil {
-		v.m = make(map[string]string)
-	}
-	v.m[key] = value
-	return v
-}
+// NÃO COLOQUE MAIS NADA ABAIXO DISSO. 
+// O Find e o updateUserInfo o Go já está pegando do arquivo helpers.go
