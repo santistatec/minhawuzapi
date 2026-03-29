@@ -169,39 +169,37 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		return
 	}
 
+	// 1. A variável é criada AQUI (eventType)
 	eventType, ok := postmap["type"].(string)
 	if !ok {
 		log.Error().Msg("Event type is not a string in postmap")
 		return
 	}
 
-	// Log subscription details for debugging
+	// Log para debug
 	log.Debug().
 		Str("userID", mycli.userID).
 		Str("eventType", eventType).
 		Strs("subscribedEvents", subscribedEvents).
 		Msg("Checking event subscription")
 
-	// Check if the current event is in the subscriptions
-	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, postmap["type"].(string), mycli.userID)
+	// Verifica se está inscrito
+	checkIfSubscribedInEvent := checkIfSubscribedToEvent(subscribedEvents, eventType, mycli.userID)
 	if !checkIfSubscribedInEvent {
 		return
 	}
 
-	// In stdio mode, send as JSON-RPC notification instead of HTTP webhook
 	if mycli.s != nil && mycli.s.mode == Stdio {
 		mycli.s.SendNotification(eventType, postmap)
 		return
 	}
 
-	// Prepare webhook data
 	jsonData, err := json.Marshal(postmap)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to marshal postmap to JSON")
 		return
 	}
 
-	// Get HMAC key for this user
 	var encryptedHmacKey []byte
 	if userinfo, found := userinfocache.Get(mycli.token); found {
 		encryptedB64 := userinfo.(Values).Get("HmacKeyEncrypted")
@@ -214,19 +212,18 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		}
 	}
 
+	// Envia para o Webhook do Usuário
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
-	eventType, _ := postmap["type"].(string)
-    if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
-        log.Info().Str("type", eventType).Msg("Enviando evento de chamada para o Webhook Global")
-        go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
-    } else {
-        // Se não for chamada, o Go simplesmente ignora e não gasta banda/processamento
-        log.Debug().Str("type", eventType).Msg("Evento ignorado para o Webhook Global (não é chamada)")
-    }
-    // --- FIM DO AJUSTE ---
+	// 2. FILTRO GLOBAL: Usamos a variável eventType que já existe (sem o :=)
+	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
+		log.Info().Str("type", eventType).Msg("Enviando evento de chamada para o Webhook Global")
+		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
+	} else {
+		log.Debug().Str("type", eventType).Msg("Evento ignorado para o Webhook Global (não é chamada)")
+	}
 
-    go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
+	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
 }
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {
