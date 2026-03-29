@@ -163,11 +163,13 @@ func getUserWebhookUrl(token string) string {
 func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path string) {
 	webhookurl := getUserWebhookUrl(mycli.token)
 
+	// Busca inscrições atualizadas
 	subscribedEvents, err := updateAndGetUserSubscriptions(mycli)
 	if err != nil {
 		return
 	}
 
+	// eventType já foi definido aqui embaixo pelo seu código original
 	eventType, ok := postmap["type"].(string)
 	if !ok {
 		log.Error().Msg("Event type is not a string in postmap")
@@ -202,12 +204,14 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 		}
 	}
 
-	// 1. Envio para o Webhook do Usuário (Instância específica)
+	// --- INÍCIO DOS ENVIOS ---
+
+	// 1. Envia para o Webhook do Usuário (Sempre envia se o usuário tiver um)
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
-	// 2. FILTRO GLOBAL: Só envia para o Gestor Tec Pro se for CHAMADA
+	// 2. FILTRO PARA O GESTOR TEC PRO (Webhook Global)
+	// Aqui não usamos ":=" pois eventType já existe lá no topo
 	if eventType == "CallOffer" || eventType == "CallTerminate" || eventType == "offer" {
-		log.Info().Str("type", eventType).Msg("Encaminhando chamada para o Global Webhook")
 		go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
 	}
 
